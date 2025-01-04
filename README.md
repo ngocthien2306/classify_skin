@@ -1,1 +1,37 @@
-# classify_skin
+# Skin Lesion Classification using Deep Learning
+
+Deep learning approach for skin lesion classification using the HAM10000 dataset. This project implements a robust classification system for 7 different types of skin lesions:
+- Melanoma (MEL)
+- Melanocytic nevus (NV) 
+- Basal cell carcinoma (BCC)
+- Actinic keratosis/Bowen's disease (AKIEC)
+- Benign keratosis (BKL)
+- Dermatofibroma (DF)
+- Vascular lesion (VASC)
+
+## Features
+
+- Data augmentation to handle class imbalance
+
+## Project Structure
+
+```
+classify_skin/
+│
+├── data/                      # Data directory
+│   ├── raw/                  # Raw dataset
+│   ├── processed/            # Processed data
+│   └── augmented/           # Augmented data
+│
+├── src/                      # Source code
+│   ├── data/                # Data processing utilities
+│   ├── models/              # Model architectures
+│   ├── training/            # Training code
+│   ├── visualization/       # Visualization utilities
+│   └── utils/               # Helper utilities
+│
+├── scripts/                  # Training/evaluation scripts
+├── config/                   # Configuration files
+├── notebooks/               # Jupyter notebooks
+└── requirements.txt         # Dependencies
+```
