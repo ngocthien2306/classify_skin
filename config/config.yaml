@@ -1,7 +1,7 @@
 data:
-  raw_dir: "/root/nguyen/research/ML/Final/raw/images"
-  processed_dir: "/root/nguyen/research/ML/Final"
-  augmented_dir: "/root/nguyen/research/ML/Final/dataset_aug"
+  raw_dir: "/root/nguyen/research/ML/Final/raw/images" 
+  processed_dir: "dataset/processed"
+  augmented_dir: "dataset/augmented"
   image_size: 224
   batch_size: 128
   num_workers: 4
@@ -51,9 +51,9 @@ augmentation:
 
 paths:
   metadata: "/root/nguyen/research/ML/Final/raw/GroundTruth.csv"
-  train_metadata: "/root/nguyen/research/ML/Final/train_metadata.csv"
-  test_metadata: "/root/nguyen/research/ML/Final/test_metadata.csv"
-  test_metadata: "/root/nguyen/research/ML/Final/augmented_metadata.csv"
+  train_metadata: "dataset/processed/train_metadata.csv"
+  test_metadata: "dataset/processed/test_metadata.csv"
+  test_metadata: "dataset/processed/augmented_metadata.csv"
 
 logging:
   log_dir: "logs"
