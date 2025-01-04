@@ -35,3 +35,16 @@ classify_skin/
 ├── notebooks/               # Jupyter notebooks
 └── requirements.txt         # Dependencies
 ```
+
+
+## Usage
+
+#### Training
+```
+python scripts/train.py
+```
+
+#### Evaluation
+```
+python scripts/evaluate.py
+```
