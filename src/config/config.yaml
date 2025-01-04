@@ -40,6 +40,10 @@ augmentation:
   target_samples: 2000
   rotate_limit: 45
   brightness_contrast_limit: 0.2
+  use_color_augmentation: true
+  use_noise_augmentation: true
+  min_visibility: 0.8
+  scale_limit: 0.1
 
 paths:
   metadata: "data/raw/GroundTruth.csv"
@@ -49,3 +53,9 @@ paths:
 logging:
   log_dir: "logs"
   level: "INFO"
+
+visualization:
+  output_dir: "visualizations"
+  dpi: 300
+  figure_formats: ["png", "pdf"]
+  style: "seaborn"
