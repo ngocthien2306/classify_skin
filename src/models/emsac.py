@@ -3,51 +3,45 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-from models.base_model import BaseModel
+from .base_model import BaseModel
 
 class CapsuleLayer(nn.Module):
     """Capsule layer with routing"""
-    def __init__(self, num_capsules, num_route_nodes, in_channels, out_channels, kernel_size=None, stride=None, routing_iterations=3):
+    def __init__(self, num_capsules, num_route_nodes, in_channels, out_channels, routing_iterations=3):
         super(CapsuleLayer, self).__init__()
-        self.num_route_nodes = num_route_nodes
         self.num_capsules = num_capsules
+        self.num_route_nodes = num_route_nodes  
         self.routing_iterations = routing_iterations
         
-        if kernel_size is not None:
-            self.conv = nn.Conv2d(in_channels, num_capsules * out_channels, kernel_size, stride, padding=1)
-        else:
-            self.W = nn.Parameter(torch.randn(1, num_route_nodes, num_capsules, out_channels, in_channels))
-
-    def forward(self, x):
-        if hasattr(self, 'conv'):
-            # For primary capsules
-            u = self.conv(x)
-            u = u.view(x.size(0), self.num_capsules, -1)
-        else:
-            # For routing capsules
-            batch_size = x.size(0)
-            x = x.unsqueeze(2).unsqueeze(4)
-            W = self.W
-            
-            u_hat = torch.matmul(W, x)
-            b = torch.zeros(batch_size, self.num_route_nodes, self.num_capsules, 1).to(x.device)
-            
-            for _ in range(self.routing_iterations):
-                c = F.softmax(b, dim=2)
-                s = (c * u_hat).sum(dim=1, keepdim=True)
-                v = self.squash(s)
-                if _ < self.routing_iterations - 1:
-                    b = b + (u_hat * v).sum(dim=-1, keepdim=True)
-            
-            return v.squeeze(1)
+        # Weight matrix to transform from in_channels to out_channels
+        self.W = nn.Parameter(torch.randn(1, num_route_nodes, num_capsules, out_channels, in_channels))
         
-        return self.squash(u)
-    
-    def squash(self, s):
+    def squash(self, tensor):
         """Squashing function to scale vectors"""
-        squared_norm = (s ** 2).sum(-1, keepdim=True)
-        scale = squared_norm / (1 + squared_norm) / torch.sqrt(squared_norm + 1e-8)
-        return scale * s
+        squared_norm = (tensor ** 2).sum(dim=-1, keepdim=True)
+        scale = squared_norm / (1 + squared_norm)
+        return scale * tensor / torch.sqrt(squared_norm + 1e-8)
+    
+    def forward(self, x):
+        batch_size = x.size(0)
+        x = x.unsqueeze(2).unsqueeze(4)
+        
+        # Calculate u_hat by matrix multiplication of W and input x
+        u_hat = torch.matmul(self.W, x).squeeze(-1)  # [batch, routes, caps, out_channels]
+        
+        # Initialize coupling coefficients
+        b = torch.zeros(batch_size, self.num_route_nodes, self.num_capsules, 1).to(x.device)
+        
+        # Dynamic Routing
+        for _ in range(self.routing_iterations):
+            c = F.softmax(b, dim=2)  # [batch, routes, caps, 1]
+            s = (c * u_hat).sum(dim=1, keepdim=True)  # [batch, 1, caps, out_channels]
+            v = self.squash(s)  # [batch, 1, caps, out_channels]
+            
+            if _ < self.routing_iterations - 1:
+                b = b + (u_hat * v).sum(dim=-1, keepdim=True)  # [batch, routes, caps, 1]
+        
+        return v.squeeze(1)  # [batch, caps, out_channels]
 
 class ChannelAttention(nn.Module):
     """Channel attention module"""
@@ -94,11 +88,10 @@ class MultiStageAttention(nn.Module):
         return x
 
 class EMSACNet(BaseModel):
-    """Enhanced Multi-Stage Attention-Capsule Network"""
     def __init__(self, num_classes=7):
         super(EMSACNet, self).__init__()
         
-        # Feature extraction module with large kernel (31x31)
+        # Feature extraction with large kernel
         self.conv1 = nn.Conv2d(3, 64, kernel_size=31, stride=2, padding=15)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -106,71 +99,99 @@ class EMSACNet(BaseModel):
         # First stage attention
         self.attention1 = MultiStageAttention(64)
         
-        # Primary capsules
-        self.primary_caps = CapsuleLayer(
-            num_capsules=32,
-            num_route_nodes=-1,  # Not used for primary capsules
-            in_channels=64,
-            out_channels=8,
-            kernel_size=9,
-            stride=2
+        # Primary capsules path
+        self.primary_caps = nn.Sequential(
+            nn.Conv2d(64, 256, kernel_size=9, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True)
         )
         
-        # Secondary stage attention
-        self.attention2 = MultiStageAttention(32*8)
+        # Second stage attention
+        self.attention2 = MultiStageAttention(256)
         
-        # Routing capsules
+        # Convert to capsules
+        self.conv_caps = nn.Conv2d(256, 32*8, kernel_size=3, stride=2, padding=1)
+        
+        # Calculate routes for digit capsules (based on feature map size)
+        self.num_routes = 27 * 27 * 32  # Based on conv_caps output size
+        
+        # Digit capsules
         self.digit_caps = CapsuleLayer(
-            num_capsules=num_classes,
-            num_route_nodes=32*6*6,  # Calculated based on input size
-            in_channels=8,
-            out_channels=16,
+            num_capsules=num_classes,  # 7 classes
+            num_route_nodes=self.num_routes, 
+            in_channels=8,  # Input capsule dimension
+            out_channels=16,  # Output capsule dimension
             routing_iterations=3
         )
+    
+    def squash(self, x, dim=-1):
+        """Squashing function to scale vectors"""
+        squared_norm = (x ** 2).sum(dim=dim, keepdim=True)
+        scale = squared_norm / (1 + squared_norm)
+        return scale * x / torch.sqrt(squared_norm + 1e-8)
         
     def forward(self, x):
+        # print("Input shape:", x.shape)
+        
         # Feature extraction
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
+        # print("After conv1:", x.shape)
         
         # First attention
         x = self.attention1(x)
+        # print("After attention1:", x.shape)
         
         # Primary capsules
         x = self.primary_caps(x)
-        
-        # Reshape for attention
-        b, c, h, w = x.shape
-        x = x.view(b, -1, h, w)
+        # print("After primary caps:", x.shape)
         
         # Second attention
         x = self.attention2(x)
+        # print("After attention2:", x.shape)
         
-        # Reshape back for routing capsules
-        x = x.view(b, -1, 8)
+        # Convert to capsules 
+        x = self.conv_caps(x)
+        # print("After conv caps:", x.shape)
+        
+        # Reshape for digit capsules
+        x = x.view(x.size(0), -1, 8)  # [batch_size, routes, capsule_dim]
+        # print("Before digit caps:", x.shape)
         
         # Digit capsules
-        x = self.digit_caps(x)
+        x = self.digit_caps(x)  # [batch_size, num_classes, 16] 
+        # print("After digit caps:", x.shape)
         
         # Calculate class probabilities
-        classes = torch.sqrt((x ** 2).sum(2))
+        classes = torch.sqrt((x ** 2).sum(2))  # [batch_size, num_classes]
+        # print("Final output:", classes.shape)
         
         return classes
     
-    def loss(self, data, target, m_plus=0.9, m_minus=0.1, lambda_=0.5):
-        """Custom loss function combining margin loss and reconstruction loss"""
-        target = F.one_hot(target, num_classes=7)
+    def loss(self, x, target, m_plus=0.9, m_minus=0.1, lambda_=0.5):
+        """
+        Custom margin loss for capsule network.
         
-        # Margin loss
-        v_c = torch.sqrt((data ** 2).sum(dim=2, keepdim=True))
+        Args:
+            x: Output from the network (class probabilities)
+            target: True labels
+            m_plus: The margin for positive cases (default: 0.9)
+            m_minus: The margin for negative cases (default: 0.1)
+            lambda_: Down-weighting of the loss for absent digits (default: 0.5)
+            
+        Returns:
+            Total loss value
+        """
+        # Convert target to one-hot encoding
+        target = F.one_hot(target, num_classes=self.num_classes).float()
         
-        max_l = F.relu(m_plus - v_c).view(data.size(0), -1)
-        max_r = F.relu(v_c - m_minus).view(data.size(0), -1)
+        # Compute the basic loss for each dimension
+        losses = target * F.relu(m_plus - x) ** 2 + \
+                lambda_ * (1.0 - target) * F.relu(x - m_minus) ** 2
+                
+        # Sum over the digit axis
+        losses = losses.sum(dim=1)
         
-        loss_l = target * max_l ** 2
-        loss_r = lambda_ * (1.0 - target) * max_r ** 2
-        margin_loss = loss_l + loss_r
-        margin_loss = margin_loss.sum(dim=1).mean()
-        
-        return margin_loss
+        # Average over the batch
+        return losses.mean()

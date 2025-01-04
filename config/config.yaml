@@ -3,7 +3,7 @@ data:
   processed_dir: "dataset/processed"
   augmented_dir: "dataset/augmented"
   image_size: 224
-  batch_size: 128
+  batch_size: 64
   num_workers: 4
 
   test_size: 0.2
@@ -22,10 +22,24 @@ model:
   
 training:
   epochs: 50
-  criterion: "cross_entropy"
   checkpoint_dir: "checkpoints"
   early_stopping_patience: 5
   use_class_weights: true
+  criterion: 'margin'  # Options: 'cross_entropy', 'margin', 'combined'
+  
+  # Optional settings for margin loss
+  margin_loss:
+    m_plus: 0.9
+    m_minus: 0.1
+    lambda: 0.5
+    
+  # Optional settings for combined loss
+  combined_loss:
+    margin_weight: 1.0
+    ce_weight: 0.2
+    m_plus: 0.9
+    m_minus: 0.1
+    lambda: 0.5
 
 
 optimizer:
