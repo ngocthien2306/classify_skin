@@ -54,55 +54,7 @@ def analyze_dataset(df, output_dir, config):
         percentage = (count / total_samples) * 100
         logger.info(f"{cls}: {count} samples ({percentage:.2f}%)")
     
-    # Analyze image properties
-    image_dir = Path(config['data']['raw_dir'])
-    heights = []
-    widths = []
-    aspect_ratios = []
-    
-    logger.info("\nAnalyzing image properties...")
-    for idx, row in df.iterrows():
-        img_path = image_dir / f"{row['image']}.jpg"
-        img = cv2.imread(str(img_path))
-        if img is not None:
-            h, w = img.shape[:2]
-            heights.append(h)
-            widths.append(w)
-            aspect_ratios.append(w/h)
-    
-    # Plot image size distribution
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-    
-    ax1.hist(heights, bins=30)
-    ax1.set_title('Height Distribution')
-    ax1.set_xlabel('Height')
-    ax1.set_ylabel('Count')
-    
-    ax2.hist(widths, bins=30)
-    ax2.set_title('Width Distribution')
-    ax2.set_xlabel('Width')
-    ax2.set_ylabel('Count')
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'image_size_distribution.png'))
-    plt.close()
-    
-    # Plot aspect ratio distribution
-    plt.figure(figsize=(10, 5))
-    plt.hist(aspect_ratios, bins=30)
-    plt.title('Aspect Ratio Distribution')
-    plt.xlabel('Aspect Ratio')
-    plt.ylabel('Count')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'aspect_ratio_distribution.png'))
-    plt.close()
-    
-    # Print image statistics
-    logger.info("\nImage Statistics:")
-    logger.info(f"Height - Mean: {np.mean(heights):.2f}, Std: {np.std(heights):.2f}")
-    logger.info(f"Width - Mean: {np.mean(widths):.2f}, Std: {np.std(widths):.2f}")
-    logger.info(f"Aspect Ratio - Mean: {np.mean(aspect_ratios):.2f}, Std: {np.std(aspect_ratios):.2f}")
-    
+
     return class_counts
 
 def prepare_data(config):
