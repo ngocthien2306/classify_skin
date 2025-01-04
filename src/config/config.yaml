@@ -1,0 +1,51 @@
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  augmented_dir: "data/augmented"
+  image_size: 224
+  batch_size: 128
+  num_workers: 4
+
+model:
+  name: "resnet18"  
+  num_classes: 7
+  pretrained: true
+  dropout_rate: 0.5
+  hidden_size: 512
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  momentum: 0.9
+  
+training:
+  epochs: 50
+  criterion: "cross_entropy"
+  checkpoint_dir: "checkpoints"
+  early_stopping_patience: 5
+  use_class_weights: true
+
+
+optimizer:
+  name: "adam"  # options: adam, sgd
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  momentum: 0.9  # only for SGD
+
+scheduler:
+  name: "reduce_on_plateau"  # options: reduce_on_plateau, cosine
+  factor: 0.1
+  patience: 3
+  min_lr: 1e-6
+
+augmentation:
+  target_samples: 2000
+  rotate_limit: 45
+  brightness_contrast_limit: 0.2
+
+paths:
+  metadata: "data/raw/GroundTruth.csv"
+  train_metadata: "data/processed/train_metadata.csv"
+  test_metadata: "data/processed/test_metadata.csv"
+
+logging:
+  log_dir: "logs"
+  level: "INFO"
