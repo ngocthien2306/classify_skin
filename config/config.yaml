@@ -1,7 +1,7 @@
 data:
-  raw_dir: "data/raw"
-  processed_dir: "data/processed"
-  augmented_dir: "data/augmented"
+  raw_dir: "dataset/raw"
+  processed_dir: "dataset/processed"
+  augmented_dir: "dataset/augmented"
   image_size: 224
   batch_size: 128
   num_workers: 4
@@ -46,9 +46,9 @@ augmentation:
   scale_limit: 0.1
 
 paths:
-  metadata: "data/raw/GroundTruth.csv"
-  train_metadata: "data/processed/train_metadata.csv"
-  test_metadata: "data/processed/test_metadata.csv"
+  metadata: "dataset/raw/GroundTruth.csv"
+  train_metadata: "dataset/processed/train_metadata.csv"
+  test_metadata: "dataset/processed/test_metadata.csv"
 
 logging:
   log_dir: "logs"

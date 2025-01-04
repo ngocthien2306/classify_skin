@@ -18,7 +18,7 @@ Deep learning approach for skin lesion classification using the HAM10000 dataset
 ```
 classify_skin/
 │
-├── data/                      # Data directory
+├── dataset/                      # Data directory
 │   ├── raw/                  # Raw dataset
 │   ├── processed/            # Processed data
 │   └── augmented/           # Augmented data
