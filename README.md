@@ -49,7 +49,8 @@ python scripts/train.py
 python scripts/evaluate.py
 ```
 
-#### Augmentation
+#### Augmentation and Split data
 ```
-python scripts/prepate_data.py
+python scripts/data/prepate_data.py
+python scripts/data/split_data.py
 ```
