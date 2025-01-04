@@ -53,7 +53,7 @@ paths:
   metadata: "/root/nguyen/research/ML/Final/raw/GroundTruth.csv"
   train_metadata: "dataset/processed/train_metadata.csv"
   test_metadata: "dataset/processed/test_metadata.csv"
-  test_metadata: "dataset/processed/augmented_metadata.csv"
+  augmented_metadata: "dataset/processed/augmented_metadata.csv"
 
 logging:
   log_dir: "logs"
