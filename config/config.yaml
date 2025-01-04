@@ -59,3 +59,10 @@ visualization:
   dpi: 300
   figure_formats: ["png", "pdf"]
   style: "seaborn"
+
+data_analysis:
+  min_samples_per_class: 1000
+  target_aspect_ratio: 1.0
+  image_size_analysis: true
+  plot_examples: true
+  examples_per_class: 5

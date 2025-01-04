@@ -48,3 +48,8 @@ python scripts/train.py
 ```
 python scripts/evaluate.py
 ```
+
+#### Augmentation
+```
+python scripts/prepate_data.py
+```
