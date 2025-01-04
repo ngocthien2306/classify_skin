@@ -54,3 +54,17 @@ python scripts/evaluate.py
 python scripts/data/prepate_data.py
 python scripts/data/split_data.py
 ```
+
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@software{classify_skin,
+  author = {Thien Nguyen, Mai Duy, Cao Cong Danh},
+  title = {Skin Lesion Classification using Deep Learning},
+  year = {2024},
+  url = {https://github.com/ngocthien2306/classify_skin}
+}
+```
