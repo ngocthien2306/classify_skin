@@ -1,4 +1,5 @@
-from .resnet import SkinLesionModel
+from .resnet import SkinLesionModel 
+from .emsac import EMSACNet
 
 def get_model(config, device):
     """
@@ -13,7 +14,9 @@ def get_model(config, device):
     """
     model_name = config['model']['name']
     
-    if 'resnet' in model_name:
+    if model_name == 'emsac':
+        model = EMSACNet(num_classes=config['model']['num_classes'])
+    elif 'resnet' in model_name:
         model = SkinLesionModel(config)
     else:
         raise ValueError(f"Model {model_name} not supported")

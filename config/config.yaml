@@ -11,9 +11,9 @@ data:
   stratify: true
 
 model:
-  name: "resnet18"  
+  name: "emsac"  
   num_classes: 7
-  pretrained: true
+  pretrained: false
   dropout_rate: 0.5
   hidden_size: 512
   learning_rate: 0.001
