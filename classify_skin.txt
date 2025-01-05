@@ -1,6 +1,114 @@
 
 --------------------------------------------------------------------------------
-File: .\scripts\evaluate.py
+File: ./scripts/train.py
+--------------------------------------------------------------------------------
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import yaml
+import torch 
+import pandas as pd
+from torch.utils.data import DataLoader
+
+from src.data.dataset import HAM10000Dataset
+from src.data.transforms import get_train_transforms, get_test_transforms
+from src.models import get_model
+from src.training import get_optimizer, get_scheduler, get_criterion, Trainer
+from src.utils import get_logger
+from src.visualization import Visualizer
+
+logger = get_logger(__name__)
+
+def main():
+    # Load config
+    with open('config/config.yaml') as f:
+        config = yaml.safe_load(f)
+    
+    # Setup device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    config['device'] = device
+    logger.info(f'Using device: {device}')
+    
+    # Create output directories
+    os.makedirs(config['training']['checkpoint_dir'], exist_ok=True)
+    os.makedirs(config['visualization']['output_dir'], exist_ok=True)
+    
+    # Load data
+    train_df = pd.read_csv(config['paths']['train_metadata'])
+    test_df = pd.read_csv(config['paths']['test_metadata'])
+    
+    # Create datasets
+    train_dataset = HAM10000Dataset(
+        train_df,
+        config['data']['augmented_dir'],
+        transform=get_train_transforms(config)
+    )
+    test_dataset = HAM10000Dataset(
+        test_df,
+        config['data']['augmented_dir'],
+        transform=get_test_transforms(config)
+    )
+    
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config['data']['batch_size'],
+        shuffle=True,
+        num_workers=config['data']['num_workers'],
+        pin_memory=True
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config['data']['batch_size'],
+        shuffle=False,
+        num_workers=config['data']['num_workers'],
+        pin_memory=True
+    )
+    
+    # Calculate class weights if needed
+    if config['training']['use_class_weights']:
+        class_weights = train_dataset.get_class_weights()
+    else:
+        class_weights = None
+    
+    # Initialize model, optimizer, scheduler, criterion
+    model = get_model(config, device)
+    optimizer = get_optimizer(model, config)
+    scheduler = get_scheduler(optimizer, config)
+    criterion = get_criterion(config, class_weights)
+    
+    # Initialize trainer and visualizer
+    trainer = Trainer(
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        config=config,
+        device=device
+    )
+    visualizer = Visualizer(config)
+    
+    # Train model
+    logger.info("Starting training...")
+    history = trainer.train(train_loader, test_loader)
+    
+    # Plot training history
+    visualizer.plot_training_history(
+        history,
+        save_path=os.path.join(config['visualization']['output_dir'], 'training_history.png')
+    )
+    
+    logger.info("Training completed!")
+
+if __name__ == '__main__':
+    main()
+--------------------------------------------------------------------------------
+File: ./scripts/run_pipeline.py
+--------------------------------------------------------------------------------
+## code coming soon
+--------------------------------------------------------------------------------
+File: ./scripts/evaluate.py
 --------------------------------------------------------------------------------
 import sys
 import os
@@ -110,124 +218,7 @@ def main():
 if __name__ == '__main__':
     main()
 --------------------------------------------------------------------------------
-File: .\scripts\run_pipeline.py
---------------------------------------------------------------------------------
-## code coming soon
---------------------------------------------------------------------------------
-File: .\scripts\train.py
---------------------------------------------------------------------------------
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import yaml
-import torch 
-import pandas as pd
-from torch.utils.data import DataLoader
-
-from src.data.dataset import HAM10000Dataset
-from src.data.transforms import get_train_transforms, get_test_transforms
-from src.models import get_model
-from src.training import get_optimizer, get_scheduler, get_criterion, Trainer
-from src.utils import get_logger
-from src.visualization import Visualizer
-
-logger = get_logger(__name__)
-
-def main():
-    # Load config
-    with open('config/config.yaml') as f:
-        config = yaml.safe_load(f)
-    
-    # Setup device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    config['device'] = device
-    logger.info(f'Using device: {device}')
-    
-    # Create output directories
-    os.makedirs(config['training']['checkpoint_dir'], exist_ok=True)
-    os.makedirs(config['visualization']['output_dir'], exist_ok=True)
-    
-    # Load data
-    train_df = pd.read_csv(config['paths']['train_metadata'])
-    test_df = pd.read_csv(config['paths']['test_metadata'])
-    
-    # Create datasets
-    train_dataset = HAM10000Dataset(
-        train_df,
-        config['data']['augmented_dir'],
-        transform=get_train_transforms(config)
-    )
-    test_dataset = HAM10000Dataset(
-        test_df,
-        config['data']['augmented_dir'],
-        transform=get_test_transforms(config)
-    )
-    
-    # Create dataloaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config['data']['batch_size'],
-        shuffle=True,
-        num_workers=config['data']['num_workers'],
-        pin_memory=True
-    )
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=config['data']['batch_size'],
-        shuffle=False,
-        num_workers=config['data']['num_workers'],
-        pin_memory=True
-    )
-    
-    # Calculate class weights if needed
-    if config['training']['use_class_weights']:
-        class_weights = train_dataset.get_class_weights()
-    else:
-        class_weights = None
-    
-    # Initialize model, optimizer, scheduler, criterion
-    model = get_model(config, device)
-    optimizer = get_optimizer(model, config)
-    scheduler = get_scheduler(optimizer, config)
-    criterion = get_criterion(config, class_weights)
-    
-    # Initialize trainer and visualizer
-    trainer = Trainer(
-        model=model,
-        criterion=criterion,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        config=config,
-        device=device
-    )
-    visualizer = Visualizer(config)
-    
-    # Train model
-    logger.info("Starting training...")
-    history = trainer.train(train_loader, test_loader)
-    
-    # Plot training history
-    visualizer.plot_training_history(
-        history,
-        save_path=os.path.join(config['visualization']['output_dir'], 'training_history.png')
-    )
-    
-    logger.info("Training completed!")
-
-if __name__ == '__main__':
-    main()
---------------------------------------------------------------------------------
-File: .\scripts\data\download.py
---------------------------------------------------------------------------------
-import kagglehub
-
-# Download latest version
-path = kagglehub.dataset_download("surajghuwalewala/ham1000-segmentation-and-classification")
-
-print("Path to dataset files:", path)
---------------------------------------------------------------------------------
-File: .\scripts\data\prepare_data.py
+File: ./scripts/data/prepare_data.py
 --------------------------------------------------------------------------------
 import sys
 import os
@@ -359,7 +350,20 @@ def main():
 if __name__ == '__main__':
     main()
 --------------------------------------------------------------------------------
-File: .\scripts\data\split_data.py
+File: ./scripts/data/download.py
+--------------------------------------------------------------------------------
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("surajghuwalewala/ham1000-segmentation-and-classification")
+
+print("Path to dataset files:", path)
+--------------------------------------------------------------------------------
+File: ./scripts/data/__init__.py
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+File: ./scripts/data/split_data.py
 --------------------------------------------------------------------------------
 import sys
 import os
@@ -514,311 +518,207 @@ def main():
 if __name__ == '__main__':
     main()
 --------------------------------------------------------------------------------
-File: .\scripts\data\__init__.py
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
-File: .\src\data\dataset.py
+File: ./src/models/emsac.py
 --------------------------------------------------------------------------------
 import torch
-from torch.utils.data import Dataset
-from PIL import Image
-import os
-import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+import math
 
-class HAM10000Dataset(Dataset):
-    """
-    HAM10000 dataset class for PyTorch
-    """
-    def __init__(self, df, image_dir, transform=None):
-        """
-        Args:
-            df (pandas.DataFrame): DataFrame containing image metadata
-            image_dir (str): Directory containing images
-            transform (callable, optional): Optional transform to be applied on images
-        """
-        self.df = df
-        self.image_dir = image_dir
-        self.transform = transform
-        self.class_columns = ['MEL', 'NV', 'BCC', 'AKIEC', 'BKL', 'DF', 'VASC']
-        
-    def __len__(self):
-        return len(self.df)
-    
-    def __getitem__(self, idx):
-        # Get image path
-        img_name = self.df.iloc[idx]['image']
-        img_path = os.path.join(self.image_dir, img_name + '.jpg')
-        
-        # Get label as class index
-        label_onehot = self.df.iloc[idx][self.class_columns].values.astype(np.float32)
-        label = np.argmax(label_onehot)
-        
-        # Load and transform image
-        image = Image.open(img_path).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
-            
-        return image, torch.tensor(label, dtype=torch.long)
+from .base_model import BaseModel
 
-    def get_class_weights(self):
-        """
-        Calculate class weights for imbalanced dataset
-        """
-        class_counts = [self.df[col].sum() for col in self.class_columns]
-        total = sum(class_counts)
-        class_weights = [total/count for count in class_counts]
-        return torch.FloatTensor(class_weights)
---------------------------------------------------------------------------------
-File: .\src\data\transforms.py
---------------------------------------------------------------------------------
-from torchvision import transforms
+class CapsuleLayer(nn.Module):
+    """Capsule layer with routing"""
+    def __init__(self, num_capsules, num_route_nodes, in_channels, out_channels, routing_iterations=3):
+        super(CapsuleLayer, self).__init__()
+        self.num_capsules = num_capsules
+        self.num_route_nodes = num_route_nodes  
+        self.routing_iterations = routing_iterations
+        
+        # Weight matrix to transform from in_channels to out_channels
+        self.W = nn.Parameter(torch.randn(1, num_route_nodes, num_capsules, out_channels, in_channels))
+        
+    def squash(self, tensor):
+        """Squashing function to scale vectors"""
+        squared_norm = (tensor ** 2).sum(dim=-1, keepdim=True)
+        scale = squared_norm / (1 + squared_norm)
+        return scale * tensor / torch.sqrt(squared_norm + 1e-8)
+    
+    def forward(self, x):
+        batch_size = x.size(0)
+        x = x.unsqueeze(2).unsqueeze(4)
+        
+        # Calculate u_hat by matrix multiplication of W and input x
+        u_hat = torch.matmul(self.W, x).squeeze(-1)  # [batch, routes, caps, out_channels]
+        
+        # Initialize coupling coefficients
+        b = torch.zeros(batch_size, self.num_route_nodes, self.num_capsules, 1).to(x.device)
+        
+        # Dynamic Routing
+        for _ in range(self.routing_iterations):
+            c = F.softmax(b, dim=2)  # [batch, routes, caps, 1]
+            s = (c * u_hat).sum(dim=1, keepdim=True)  # [batch, 1, caps, out_channels]
+            v = self.squash(s)  # [batch, 1, caps, out_channels]
+            
+            if _ < self.routing_iterations - 1:
+                b = b + (u_hat * v).sum(dim=-1, keepdim=True)  # [batch, routes, caps, 1]
+        
+        return v.squeeze(1)  # [batch, caps, out_channels]
 
-def get_train_transforms(config):
-    """
-    Get training data transforms
-    """
-    return transforms.Compose([
-        transforms.Resize((config['data']['image_size'], config['data']['image_size'])),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.RandomRotation(20),
-        transforms.ColorJitter(brightness=0.1, contrast=0.1),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-
-def get_test_transforms(config):
-    """
-    Get testing/validation data transforms
-    """
-    return transforms.Compose([
-        transforms.Resize((config['data']['image_size'], config['data']['image_size'])),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
---------------------------------------------------------------------------------
-File: .\src\data\augmentation\augmentor.py
---------------------------------------------------------------------------------
-import os
-import cv2
-import numpy as np
-from tqdm import tqdm
-import pandas as pd
-from .transforms import AugmentationPipeline
-
-class DataAugmentor:
-    """Class for handling data augmentation process"""
-    
-    def __init__(self, config):
-        self.config = config
-        self.augmentation = AugmentationPipeline(config)
+class ChannelAttention(nn.Module):
+    """Channel attention module"""
+    def __init__(self, channels, reduction=16):
+        super(ChannelAttention, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
         
-    def augment_image(self, image_path, num_augmentations):
-        """
-        Augment a single image multiple times
-        
-        Args:
-            image_path (str): Path to image
-            num_augmentations (int): Number of augmented versions to create
-            
-        Returns:
-            list: List of augmented images
-        """
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
-        augmented_images = []
-        for _ in range(num_augmentations):
-            augmented = self.augmentation.train_transform(image=image)['image']
-            augmented_images.append(augmented)
-            
-        return augmented_images
-    
-    def augment_class(self, df, class_name, target_samples):
-        """
-        Augment images of a specific class to reach target number of samples
-        
-        Args:
-            df (pd.DataFrame): DataFrame with image metadata
-            class_name (str): Name of the class to augment
-            target_samples (int): Target number of samples
-            
-        Returns:
-            pd.DataFrame: DataFrame with augmented data
-        """
-        class_df = df[df[class_name] == 1].copy()
-        current_samples = len(class_df)
-        
-        if current_samples >= target_samples:
-            return pd.DataFrame()  # No augmentation needed
-            
-        augmented_data = []
-        samples_needed = target_samples - current_samples
-        multiplier = samples_needed // current_samples + 1
-        
-        for idx, row in tqdm(class_df.iterrows(), 
-                           total=len(class_df),
-                           desc=f"Augmenting {class_name}"):
-            image_path = os.path.join(self.config['data']['raw_dir'], 
-                                    f"{row['image']}.jpg")
-            
-            for i in range(multiplier):
-                if len(augmented_data) >= samples_needed:
-                    break
-                    
-                new_row = row.copy()
-                new_row['image'] = f"{row['image']}_aug_{i+1}"
-                augmented_data.append(new_row)
-                
-        return pd.DataFrame(augmented_data)
-    
-    def augment_dataset(self, df):
-        """
-        Augment entire dataset based on config settings
-        
-        Args:
-            df (pd.DataFrame): Original DataFrame with image metadata
-            
-        Returns:
-            pd.DataFrame: Augmented DataFrame
-        """
-        augmented_df = df.copy()
-        target_samples = self.config['augmentation']['target_samples']
-        
-        for class_name in ['MEL', 'BCC', 'AKIEC', 'BKL', 'DF', 'VASC']:
-            aug_class_df = self.augment_class(df, class_name, target_samples)
-            if not aug_class_df.empty:
-                augmented_df = pd.concat([augmented_df, aug_class_df], 
-                                       ignore_index=True)
-                
-        return augmented_df
-    
-    def save_augmented_data(self, augmented_df):
-        """
-        Save augmented images and metadata
-        
-        Args:
-            augmented_df (pd.DataFrame): DataFrame with augmented data
-        """
-        output_dir = self.config['data']['augmented_dir']
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Save original images
-        for idx, row in tqdm(augmented_df.iterrows(), 
-                           desc="Saving images",
-                           total=len(augmented_df)):
-            if '_aug_' not in row['image']:
-                src_path = os.path.join(self.config['data']['raw_dir'], 
-                                      f"{row['image']}.jpg")
-                dst_path = os.path.join(output_dir, f"{row['image']}.jpg")
-                if not os.path.exists(dst_path):
-                    cv2.imwrite(dst_path, cv2.imread(src_path))
-                    
-            else:
-                # Generate and save augmented image
-                original_name = row['image'].split('_aug_')[0]
-                original_path = os.path.join(self.config['data']['raw_dir'], 
-                                          f"{original_name}.jpg")
-                img = cv2.imread(original_path)
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                augmented = self.augmentation.train_transform(image=img)['image']
-                augmented = augmented.numpy().transpose(1, 2, 0)
-                augmented = (augmented * 255).astype(np.uint8)
-                cv2.imwrite(
-                    os.path.join(output_dir, f"{row['image']}.jpg"),
-                    cv2.cvtColor(augmented, cv2.COLOR_RGB2BGR)
-                )
-        
-        # Save metadata
-        augmented_df.to_csv(
-            os.path.join(self.config['data']['processed_dir'], 'augmented_metadata.csv'),
-            index=False
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channels // reduction, channels, bias=False)
         )
---------------------------------------------------------------------------------
-File: .\src\data\augmentation\transforms.py
---------------------------------------------------------------------------------
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-import cv2
-import numpy as np
+        
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        avg_out = self.fc(self.avg_pool(x).view(b, c))
+        max_out = self.fc(self.max_pool(x).view(b, c))
+        out = avg_out + max_out
+        return torch.sigmoid(out).view(b, c, 1, 1)
 
-class AugmentationPipeline:
-    """Class handling image augmentation pipeline"""
+class SpatialAttention(nn.Module):
+    """Spatial attention module"""
+    def __init__(self, kernel_size=7):
+        super(SpatialAttention, self).__init__()
+        self.conv = nn.Conv2d(2, 1, kernel_size=kernel_size, padding=kernel_size//2)
+        
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        x = torch.cat([avg_out, max_out], dim=1)
+        return torch.sigmoid(self.conv(x))
+
+class MultiStageAttention(nn.Module):
+    """Multi-stage attention module combining channel and spatial attention"""
+    def __init__(self, channels):
+        super(MultiStageAttention, self).__init__()
+        self.ca = ChannelAttention(channels)
+        self.sa = SpatialAttention()
+        
+    def forward(self, x):
+        x = x * self.ca(x)
+        x = x * self.sa(x)
+        return x
+
+class EMSACNet(BaseModel):
+    def __init__(self, num_classes=7):
+        super(EMSACNet, self).__init__()
+        
+        # Feature extraction with large kernel
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=31, stride=2, padding=15)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        
+        # First stage attention
+        self.attention1 = MultiStageAttention(64)
+        
+        # Primary capsules path
+        self.primary_caps = nn.Sequential(
+            nn.Conv2d(64, 256, kernel_size=9, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True)
+        )
+        
+        # Second stage attention
+        self.attention2 = MultiStageAttention(256)
+        
+        # Convert to capsules
+        self.conv_caps = nn.Conv2d(256, 32*8, kernel_size=3, stride=2, padding=1)
+        
+        # Calculate routes for digit capsules (based on feature map size)
+        self.num_routes = 27 * 27 * 32  # Based on conv_caps output size
+        
+        # Digit capsules
+        self.digit_caps = CapsuleLayer(
+            num_capsules=num_classes,  # 7 classes
+            num_route_nodes=self.num_routes, 
+            in_channels=8,  # Input capsule dimension
+            out_channels=16,  # Output capsule dimension
+            routing_iterations=3
+        )
     
-    def __init__(self, config):
-        self.config = config
-        self.train_transform = self.get_train_transform()
-        self.valid_transform = self.get_valid_transform()
+    def squash(self, x, dim=-1):
+        """Squashing function to scale vectors"""
+        squared_norm = (x ** 2).sum(dim=dim, keepdim=True)
+        scale = squared_norm / (1 + squared_norm)
+        return scale * x / torch.sqrt(squared_norm + 1e-8)
         
-    def get_train_transform(self):
-        """Get augmentation pipeline for training"""
-        return A.Compose([
-            A.Resize(
-                height=self.config['data']['image_size'],
-                width=self.config['data']['image_size']
-            ),
-            A.OneOf([
-                A.RandomRotate90(p=0.5),
-                A.Rotate(
-                    limit=self.config['augmentation']['rotate_limit'],
-                    p=0.5
-                ),
-            ], p=0.5),
-            A.Flip(p=0.5),
-            A.OneOf([
-                A.RandomBrightnessContrast(
-                    brightness_limit=self.config['augmentation']['brightness_contrast_limit'],
-                    contrast_limit=self.config['augmentation']['brightness_contrast_limit'],
-                    p=0.7
-                ),
-                A.HueSaturationValue(
-                    hue_shift_limit=20,
-                    sat_shift_limit=30,
-                    val_shift_limit=20,
-                    p=0.5
-                ),
-            ], p=0.5),
-            A.OneOf([
-                A.GaussNoise(p=0.3),
-                A.GaussianBlur(p=0.3),
-                A.MotionBlur(p=0.3),
-            ], p=0.3),
-            A.ShiftScaleRotate(
-                shift_limit=0.1,
-                scale_limit=0.1,
-                rotate_limit=45,
-                p=0.5
-            ),
-            A.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225]
-            ),
-            ToTensorV2(),
-        ])
+    def forward(self, x):
+        # print("Input shape:", x.shape)
         
-    def get_valid_transform(self):
-        """Get augmentation pipeline for validation/testing"""
-        return A.Compose([
-            A.Resize(
-                height=self.config['data']['image_size'],
-                width=self.config['data']['image_size']
-            ),
-            A.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225]
-            ),
-            ToTensorV2(),
-        ])
+        # Feature extraction
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        # print("After conv1:", x.shape)
+        
+        # First attention
+        x = self.attention1(x)
+        # print("After attention1:", x.shape)
+        
+        # Primary capsules
+        x = self.primary_caps(x)
+        # print("After primary caps:", x.shape)
+        
+        # Second attention
+        x = self.attention2(x)
+        # print("After attention2:", x.shape)
+        
+        # Convert to capsules 
+        x = self.conv_caps(x)
+        # print("After conv caps:", x.shape)
+        
+        # Reshape for digit capsules
+        x = x.view(x.size(0), -1, 8)  # [batch_size, routes, capsule_dim]
+        # print("Before digit caps:", x.shape)
+        
+        # Digit capsules
+        x = self.digit_caps(x)  # [batch_size, num_classes, 16] 
+        # print("After digit caps:", x.shape)
+        
+        # Calculate class probabilities
+        classes = torch.sqrt((x ** 2).sum(2))  # [batch_size, num_classes]
+        # print("Final output:", classes.shape)
+        
+        return classes
+    
+    def loss(self, x, target, m_plus=0.9, m_minus=0.1, lambda_=0.5):
+        """
+        Custom margin loss for capsule network.
+        
+        Args:
+            x: Output from the network (class probabilities)
+            target: True labels
+            m_plus: The margin for positive cases (default: 0.9)
+            m_minus: The margin for negative cases (default: 0.1)
+            lambda_: Down-weighting of the loss for absent digits (default: 0.5)
+            
+        Returns:
+            Total loss value
+        """
+        # Convert target to one-hot encoding
+        target = F.one_hot(target, num_classes=self.num_classes).float()
+        
+        # Compute the basic loss for each dimension
+        losses = target * F.relu(m_plus - x) ** 2 + \
+                lambda_ * (1.0 - target) * F.relu(x - m_minus) ** 2
+                
+        # Sum over the digit axis
+        losses = losses.sum(dim=1)
+        
+        # Average over the batch
+        return losses.mean()
 --------------------------------------------------------------------------------
-File: .\src\data\augmentation\__init__.py
---------------------------------------------------------------------------------
-from .augmentor import DataAugmentor
-from .transforms import AugmentationPipeline
-
-__all__ = ['DataAugmentor', 'AugmentationPipeline']
---------------------------------------------------------------------------------
-File: .\src\models\base_model.py
+File: ./src/models/base_model.py
 --------------------------------------------------------------------------------
 from abc import ABC, abstractmethod
 import torch.nn as nn
@@ -837,9 +737,18 @@ class BaseModel(ABC, nn.Module):
         params = sum([p.numel() for p in model_parameters])
         return super().__str__() + f'\nTrainable parameters: {params}'
 --------------------------------------------------------------------------------
-File: .\src\models\model_factory.py
+File: ./src/models/__init__.py
 --------------------------------------------------------------------------------
+from .model_factory import get_model
 from .resnet import SkinLesionModel
+from .emsac import EMSACNet
+
+__all__ = ['get_model', 'SkinLesionModel', 'EMSACNet']
+--------------------------------------------------------------------------------
+File: ./src/models/model_factory.py
+--------------------------------------------------------------------------------
+from .resnet import SkinLesionModel 
+from .emsac import EMSACNet
 
 def get_model(config, device):
     """
@@ -854,14 +763,16 @@ def get_model(config, device):
     """
     model_name = config['model']['name']
     
-    if 'resnet' in model_name:
+    if model_name == 'emsac':
+        model = EMSACNet(num_classes=config['model']['num_classes'])
+    elif 'resnet' in model_name:
         model = SkinLesionModel(config)
     else:
         raise ValueError(f"Model {model_name} not supported")
         
     return model.to(device)
 --------------------------------------------------------------------------------
-File: .\src\models\resnet.py
+File: ./src/models/resnet.py
 --------------------------------------------------------------------------------
 import torch.nn as nn
 from torchvision import models
@@ -907,337 +818,7 @@ class SkinLesionModel(BaseModel):
     def forward(self, x):
         return self.backbone(x)
 --------------------------------------------------------------------------------
-File: .\src\models\__init__.py
---------------------------------------------------------------------------------
-from .model_factory import get_model
-from .resnet import SkinLesionModel
-
-__all__ = ['get_model', 'SkinLesionModel']
---------------------------------------------------------------------------------
-File: .\src\training\metrics.py
---------------------------------------------------------------------------------
-import torch
-from sklearn.metrics import classification_report, confusion_matrix
-import numpy as np
-import pandas as pd
-
-def calculate_metrics(model, data_loader, device):
-    """
-    Calculate detailed metrics for model evaluation
-    """
-    model.eval()
-    classes = ['MEL', 'NV', 'BCC', 'AKIEC', 'BKL', 'DF', 'VASC']
-    
-    all_labels = []
-    all_predictions = []
-    
-    with torch.no_grad():
-        for images, labels in data_loader:
-            images = images.to(device)
-            outputs = model(images)
-            _, predictions = outputs.max(1)
-            
-            all_labels.extend(labels.cpu().numpy())
-            all_predictions.extend(predictions.cpu().numpy())
-    
-    # Convert to numpy arrays
-    all_labels = np.array(all_labels)
-    all_predictions = np.array(all_predictions)
-    
-    # Calculate classification report
-    report = classification_report(all_labels, all_predictions, 
-                                 target_names=classes, 
-                                 output_dict=True)
-    
-    # Calculate confusion matrix
-    conf_matrix = confusion_matrix(all_labels, all_predictions)
-    
-    # Convert to pandas DataFrame for better visualization
-    report_df = pd.DataFrame(report).transpose()
-    conf_matrix_df = pd.DataFrame(conf_matrix, 
-                                 index=classes,
-                                 columns=classes)
-    
-    return {
-        'classification_report': report_df,
-        'confusion_matrix': conf_matrix_df
-    }
---------------------------------------------------------------------------------
-File: .\src\training\trainer.py
---------------------------------------------------------------------------------
-import torch
-import time
-from tqdm import tqdm
-from .metrics import calculate_metrics
-from ..utils.logger import get_logger
-
-logger = get_logger(__name__)
-
-class Trainer:
-    """
-    Trainer class for model training
-    """
-    def __init__(self, model, criterion, optimizer, scheduler, config, device):
-        self.model = model
-        self.criterion = criterion
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.config = config
-        self.device = device
-        self.epochs = config['training']['epochs']
-        self.best_val_acc = 0.0
-        
-    def train_epoch(self, train_loader):
-        """Single epoch training"""
-        self.model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        
-        pbar = tqdm(train_loader, desc='Training')
-        for batch_idx, (images, labels) in enumerate(pbar):
-            images, labels = images.to(self.device), labels.to(self.device)
-            
-            # Forward pass
-            self.optimizer.zero_grad()
-            outputs = self.model(images)
-            loss = self.criterion(outputs, labels)
-            
-            # Backward pass
-            loss.backward()
-            self.optimizer.step()
-            
-            # Calculate accuracy
-            running_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-            
-            # Update progress bar
-            pbar.set_postfix({
-                'loss': running_loss/(batch_idx+1),
-                'acc': 100.*correct/total
-            })
-            
-        epoch_loss = running_loss / len(train_loader)
-        epoch_acc = 100. * correct / total
-        return epoch_loss, epoch_acc
-    
-    def validate(self, val_loader):
-        """Validation step"""
-        self.model.eval()
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        
-        with torch.no_grad():
-            pbar = tqdm(val_loader, desc='Validation')
-            for batch_idx, (images, labels) in enumerate(pbar):
-                images, labels = images.to(self.device), labels.to(self.device)
-                
-                outputs = self.model(images)
-                loss = self.criterion(outputs, labels)
-                
-                running_loss += loss.item()
-                _, predicted = outputs.max(1)
-                total += labels.size(0)
-                correct += predicted.eq(labels).sum().item()
-                
-                pbar.set_postfix({
-                    'loss': running_loss/(batch_idx+1),
-                    'acc': 100.*correct/total
-                })
-                
-        val_loss = running_loss / len(val_loader)
-        val_acc = 100. * correct / total
-        return val_loss, val_acc
-    
-    def train(self, train_loader, val_loader):
-        """Full training loop"""
-        logger.info("Starting training...")
-        history = {
-            'train_loss': [], 'train_acc': [],
-            'val_loss': [], 'val_acc': []
-        }
-        
-        for epoch in range(self.epochs):
-            logger.info(f'\nEpoch {epoch+1}/{self.epochs}')
-            
-            # Training phase
-            train_loss, train_acc = self.train_epoch(train_loader)
-            
-            # Validation phase
-            val_loss, val_acc = self.validate(val_loader)
-            
-            # Update learning rate
-            self.scheduler.step(val_loss)
-            
-            # Save best model
-            if val_acc > self.best_val_acc:
-                self.best_val_acc = val_acc
-                self.save_checkpoint(epoch, 'best_model.pth')
-            
-            # Update history
-            history['train_loss'].append(train_loss)
-            history['train_acc'].append(train_acc)
-            history['val_loss'].append(val_loss)
-            history['val_acc'].append(val_acc)
-            
-            # Log results
-            logger.info(f'Train Loss: {train_loss:.4f} Train Acc: {train_acc:.2f}%')
-            logger.info(f'Val Loss: {val_loss:.4f} Val Acc: {val_acc:.2f}%')
-            
-            # Calculate per-class metrics every 5 epochs
-            if (epoch + 1) % 5 == 0:
-                metrics = calculate_metrics(self.model, val_loader, self.device)
-                logger.info(f"Per-class metrics:\n{metrics}")
-                
-        return history
-    
-    def save_checkpoint(self, epoch, filename):
-        """Save model checkpoint"""
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict(),
-            'best_val_acc': self.best_val_acc,
-            'config': self.config
-        }
-        
-        checkpoint_path = f"{self.config['training']['checkpoint_dir']}/{filename}"
-        torch.save(checkpoint, checkpoint_path)
-        logger.info(f"Checkpoint saved: {checkpoint_path}")
---------------------------------------------------------------------------------
-File: .\src\training\utils.py
---------------------------------------------------------------------------------
-import torch
-import torch.nn as nn
-import torch.optim as optim
-
-def get_optimizer(model, config):
-    """
-    Get optimizer based on config
-    """
-    if config['optimizer']['name'] == 'adam':
-        return optim.Adam(
-            model.parameters(),
-            lr=config['optimizer']['learning_rate'],
-            weight_decay=config['optimizer']['weight_decay']
-        )
-    elif config['optimizer']['name'] == 'sgd':
-        return optim.SGD(
-            model.parameters(),
-            lr=config['optimizer']['learning_rate'],
-            momentum=config['optimizer']['momentum'],
-            weight_decay=config['optimizer']['weight_decay']
-        )
-    else:
-        raise ValueError(f"Optimizer {config['optimizer']['name']} not supported")
-
-def get_scheduler(optimizer, config):
-    """
-    Get learning rate scheduler based on config
-    """
-    if config['scheduler']['name'] == 'reduce_on_plateau':
-        return optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode='min',
-            factor=config['scheduler']['factor'],
-            patience=config['scheduler']['patience'],
-            verbose=True
-        )
-    elif config['scheduler']['name'] == 'cosine':
-        return optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=config['training']['epochs'],
-            eta_min=config['scheduler']['min_lr']
-        )
-    else:
-        raise ValueError(f"Scheduler {config['scheduler']['name']} not supported")
-
-def get_criterion(config, class_weights=None):
-    """
-    Get loss function based on config
-    """
-    if config['training']['criterion'] == 'cross_entropy':
-        if class_weights is not None:
-            return nn.CrossEntropyLoss(weight=class_weights.to(config['device']))
-        return nn.CrossEntropyLoss()
-    else:
-        raise ValueError(f"Criterion {config['training']['criterion']} not supported")
---------------------------------------------------------------------------------
-File: .\src\training\__init__.py
---------------------------------------------------------------------------------
-from .trainer import Trainer
-from .metrics import calculate_metrics
-from .utils import get_optimizer, get_scheduler, get_criterion
-
-__all__ = [
-    'Trainer',
-    'calculate_metrics',
-    'get_optimizer',
-    'get_scheduler',
-    'get_criterion'
-]
---------------------------------------------------------------------------------
-File: .\src\utils\logger.py
---------------------------------------------------------------------------------
-import logging
-import os
-from datetime import datetime
-
-def get_logger(name, log_dir='logs'):
-    """
-    Create a logger instance
-    
-    Args:
-        name (str): Logger name (usually __name__ from the calling module)
-        log_dir (str): Directory to store log files
-        
-    Returns:
-        logger: Configured logger instance
-    """
-    # Create logs directory if it doesn't exist
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Create logger instance
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    
-    # Create formatter
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # File handler
-    log_file = os.path.join(
-        log_dir, 
-        f'run_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
-    )
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    
-    # Add handlers to logger
-    if not logger.handlers:
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-    
-    return logger
---------------------------------------------------------------------------------
-File: .\src\utils\__init__.py
---------------------------------------------------------------------------------
-from .logger import get_logger
-
-__all__ = ['get_logger']
---------------------------------------------------------------------------------
-File: .\src\visualization\visualizer.py
+File: ./src/visualization/visualizer.py
 --------------------------------------------------------------------------------
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -1440,13 +1021,743 @@ class Visualizer:
             logger.info(f"Learning rate finder plot saved to {save_path}")
         plt.show()
 --------------------------------------------------------------------------------
-File: .\src\visualization\__init__.py
+File: ./src/visualization/__init__.py
 --------------------------------------------------------------------------------
 from .visualizer import Visualizer
 
 __all__ = ['Visualizer']
 --------------------------------------------------------------------------------
-File: .\tests\sum_code.py
+File: ./src/training/__init__.py
+--------------------------------------------------------------------------------
+from .trainer import Trainer
+from .metrics import calculate_metrics
+from .utils import get_optimizer, get_scheduler, get_criterion
+
+__all__ = [
+    'Trainer',
+    'calculate_metrics',
+    'get_optimizer',
+    'get_scheduler',
+    'get_criterion'
+]
+--------------------------------------------------------------------------------
+File: ./src/training/utils.py
+--------------------------------------------------------------------------------
+import torch.optim as optim
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class MarginLoss(nn.Module):
+    """
+    Margin Loss for Capsule Networks as described in Dynamic Routing Between Capsules paper
+    """
+    def __init__(self, m_plus=0.9, m_minus=0.1, lambda_=0.5):
+        """
+        Args:
+            m_plus: The margin for positive cases (default: 0.9)
+            m_minus: The margin for negative cases (default: 0.1) 
+            lambda_: Down-weighting of the loss for absent classes (default: 0.5)
+        """
+        super(MarginLoss, self).__init__()
+        self.m_plus = m_plus
+        self.m_minus = m_minus
+        self.lambda_ = lambda_
+
+    def forward(self, outputs, targets, num_classes=7):
+        """
+        Args:
+            outputs: Network outputs after squashing (class probabilities)
+            targets: Ground truth labels
+            num_classes: Number of classes (default: 7 for HAM10000)
+
+        Returns:
+            Total loss value
+        """
+        # Convert targets to one-hot encoding
+        target_oh = F.one_hot(targets, num_classes=num_classes).float()
+        
+        # Compute losses for each dimension
+        present_error = F.relu(self.m_plus - outputs) ** 2  # for positive cases
+        absent_error = F.relu(outputs - self.m_minus) ** 2  # for negative cases
+        
+        # Combine losses with class weighting
+        loss = target_oh * present_error + \
+               self.lambda_ * (1.0 - target_oh) * absent_error
+        
+        # Sum over class dimension, mean over batch
+        loss = loss.sum(dim=1).mean()
+        
+        return loss
+
+class CombinedLoss(nn.Module):
+    """
+    Combined loss that can mix multiple loss functions with weights
+    """
+    def __init__(self, margin_weight=1.0, ce_weight=0.0, class_weights=None, 
+                 m_plus=0.9, m_minus=0.1, lambda_=0.5):
+        """
+        Args:
+            margin_weight: Weight for margin loss
+            ce_weight: Weight for cross entropy loss
+            class_weights: Class weights for cross entropy loss
+            m_plus: Margin loss parameter
+            m_minus: Margin loss parameter
+            lambda_: Margin loss parameter
+        """
+        super(CombinedLoss, self).__init__()
+        self.margin_loss = MarginLoss(m_plus, m_minus, lambda_)
+        self.ce_loss = nn.CrossEntropyLoss(weight=class_weights) if class_weights is not None else nn.CrossEntropyLoss()
+        self.margin_weight = margin_weight
+        self.ce_weight = ce_weight
+
+    def forward(self, outputs, targets, num_classes=7):
+        """
+        Args:
+            outputs: Network outputs
+            targets: Ground truth labels
+            num_classes: Number of classes
+        """
+        loss = 0
+        if self.margin_weight > 0:
+            loss += self.margin_weight * self.margin_loss(outputs, targets, num_classes)
+        if self.ce_weight > 0:
+            loss += self.ce_weight * self.ce_loss(outputs, targets)
+        return loss
+    
+def get_optimizer(model, config):
+    """
+    Get optimizer based on config
+    """
+    if config['optimizer']['name'] == 'adam':
+        return optim.Adam(
+            model.parameters(),
+            lr=config['optimizer']['learning_rate'],
+            weight_decay=config['optimizer']['weight_decay']
+        )
+    elif config['optimizer']['name'] == 'sgd':
+        return optim.SGD(
+            model.parameters(),
+            lr=config['optimizer']['learning_rate'],
+            momentum=config['optimizer']['momentum'],
+            weight_decay=config['optimizer']['weight_decay']
+        )
+    else:
+        raise ValueError(f"Optimizer {config['optimizer']['name']} not supported")
+
+def get_scheduler(optimizer, config):
+    """
+    Get learning rate scheduler based on config
+    """
+    if config['scheduler']['name'] == 'reduce_on_plateau':
+        return optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode='min',
+            factor=config['scheduler']['factor'],
+            patience=config['scheduler']['patience'],
+            verbose=True
+        )
+    elif config['scheduler']['name'] == 'cosine':
+        return optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=config['training']['epochs'],
+            eta_min=config['scheduler']['min_lr']
+        )
+    else:
+        raise ValueError(f"Scheduler {config['scheduler']['name']} not supported")
+
+def get_criterion(config, class_weights=None):
+    """
+    Get loss function based on config
+    
+    Args:
+        config: Configuration dictionary
+        class_weights: Optional class weights tensor for weighted loss
+        
+    Returns:
+        Loss function
+    """
+    criterion_name = config['training']['criterion']
+    
+    if criterion_name == 'cross_entropy':
+        if class_weights is not None:
+            return nn.CrossEntropyLoss(weight=class_weights.to(config['device']))
+        return nn.CrossEntropyLoss()
+        
+    elif criterion_name == 'margin':
+        margin_config = config['training'].get('margin_loss', {})
+        return MarginLoss(
+            m_plus=margin_config.get('m_plus', 0.9),
+            m_minus=margin_config.get('m_minus', 0.1),
+            lambda_=margin_config.get('lambda', 0.5)
+        )
+        
+    elif criterion_name == 'combined':
+        combined_config = config['training'].get('combined_loss', {})
+        return CombinedLoss(
+            margin_weight=combined_config.get('margin_weight', 1.0),
+            ce_weight=combined_config.get('ce_weight', 0.0),
+            class_weights=class_weights,
+            m_plus=combined_config.get('m_plus', 0.9),
+            m_minus=combined_config.get('m_minus', 0.1),
+            lambda_=combined_config.get('lambda', 0.5)
+        )
+        
+    else:
+        raise ValueError(f"Criterion {criterion_name} not supported")
+--------------------------------------------------------------------------------
+File: ./src/training/metrics.py
+--------------------------------------------------------------------------------
+import torch
+from sklearn.metrics import classification_report, confusion_matrix
+import numpy as np
+import pandas as pd
+
+def calculate_metrics(model, data_loader, device):
+    """
+    Calculate detailed metrics for model evaluation
+    """
+    model.eval()
+    classes = ['MEL', 'NV', 'BCC', 'AKIEC', 'BKL', 'DF', 'VASC']
+    
+    all_labels = []
+    all_predictions = []
+    
+    with torch.no_grad():
+        for images, labels in data_loader:
+            images = images.to(device)
+            outputs = model(images)
+            _, predictions = outputs.max(1)
+            
+            all_labels.extend(labels.cpu().numpy())
+            all_predictions.extend(predictions.cpu().numpy())
+    
+    # Convert to numpy arrays
+    all_labels = np.array(all_labels)
+    all_predictions = np.array(all_predictions)
+    
+    # Calculate classification report
+    report = classification_report(all_labels, all_predictions, 
+                                 target_names=classes, 
+                                 output_dict=True)
+    
+    # Calculate confusion matrix
+    conf_matrix = confusion_matrix(all_labels, all_predictions)
+    
+    # Convert to pandas DataFrame for better visualization
+    report_df = pd.DataFrame(report).transpose()
+    conf_matrix_df = pd.DataFrame(conf_matrix, 
+                                 index=classes,
+                                 columns=classes)
+    
+    return {
+        'classification_report': report_df,
+        'confusion_matrix': conf_matrix_df
+    }
+--------------------------------------------------------------------------------
+File: ./src/training/trainer.py
+--------------------------------------------------------------------------------
+import torch
+import time
+from tqdm import tqdm
+from .metrics import calculate_metrics
+from ..utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+class Trainer:
+    """
+    Trainer class for model training
+    """
+    def __init__(self, model, criterion, optimizer, scheduler, config, device):
+        self.model = model
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.config = config
+        self.device = device
+        self.epochs = config['training']['epochs']
+        self.best_val_acc = 0.0
+        
+    def train_epoch(self, train_loader):
+        """Single epoch training"""
+        self.model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        
+        pbar = tqdm(train_loader, desc='Training')
+        for batch_idx, (images, labels) in enumerate(pbar):
+            images, labels = images.to(self.device), labels.to(self.device)
+            
+            # Forward pass
+            self.optimizer.zero_grad()
+            outputs = self.model(images)
+            loss = self.criterion(outputs, labels)
+            
+            # Backward pass
+            loss.backward()
+            self.optimizer.step()
+            
+            # Calculate accuracy
+            running_loss += loss.item()
+            _, predicted = outputs.max(1)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
+            
+            # Update progress bar
+            pbar.set_postfix({
+                'loss': running_loss/(batch_idx+1),
+                'acc': 100.*correct/total
+            })
+            
+        epoch_loss = running_loss / len(train_loader)
+        epoch_acc = 100. * correct / total
+        return epoch_loss, epoch_acc
+    
+    def validate(self, val_loader):
+        """Validation step"""
+        self.model.eval()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        
+        with torch.no_grad():
+            pbar = tqdm(val_loader, desc='Validation')
+            for batch_idx, (images, labels) in enumerate(pbar):
+                images, labels = images.to(self.device), labels.to(self.device)
+                
+                outputs = self.model(images)
+                loss = self.criterion(outputs, labels)
+                
+                running_loss += loss.item()
+                _, predicted = outputs.max(1)
+                total += labels.size(0)
+                correct += predicted.eq(labels).sum().item()
+                
+                pbar.set_postfix({
+                    'loss': running_loss/(batch_idx+1),
+                    'acc': 100.*correct/total
+                })
+                
+        val_loss = running_loss / len(val_loader)
+        val_acc = 100. * correct / total
+        return val_loss, val_acc
+    
+    def train(self, train_loader, val_loader):
+        """Full training loop"""
+        logger.info("Starting training...")
+        history = {
+            'train_loss': [], 'train_acc': [],
+            'val_loss': [], 'val_acc': []
+        }
+        
+        for epoch in range(self.epochs):
+            logger.info(f'\nEpoch {epoch+1}/{self.epochs}')
+            
+            # Training phase
+            train_loss, train_acc = self.train_epoch(train_loader)
+            
+            # Validation phase
+            val_loss, val_acc = self.validate(val_loader)
+            
+            # Update learning rate
+            self.scheduler.step(val_loss)
+            
+            # Save best model
+            if val_acc > self.best_val_acc:
+                self.best_val_acc = val_acc
+                self.save_checkpoint(epoch, 'best_model.pth')
+            
+            # Update history
+            history['train_loss'].append(train_loss)
+            history['train_acc'].append(train_acc)
+            history['val_loss'].append(val_loss)
+            history['val_acc'].append(val_acc)
+            
+            # Log results
+            logger.info(f'Train Loss: {train_loss:.4f} Train Acc: {train_acc:.2f}%')
+            logger.info(f'Val Loss: {val_loss:.4f} Val Acc: {val_acc:.2f}%')
+            
+            # Calculate per-class metrics every 5 epochs
+            if (epoch + 1) % 5 == 0:
+                metrics = calculate_metrics(self.model, val_loader, self.device)
+                logger.info(f"Per-class metrics:\n{metrics}")
+                
+        return history
+    
+    def save_checkpoint(self, epoch, filename):
+        """Save model checkpoint"""
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'best_val_acc': self.best_val_acc,
+            'config': self.config
+        }
+        
+        checkpoint_path = f"{self.config['training']['checkpoint_dir']}/{filename}"
+        torch.save(checkpoint, checkpoint_path)
+        logger.info(f"Checkpoint saved: {checkpoint_path}")
+--------------------------------------------------------------------------------
+File: ./src/utils/logger.py
+--------------------------------------------------------------------------------
+import logging
+import os
+from datetime import datetime
+
+def get_logger(name, log_dir='logs'):
+    """
+    Create a logger instance
+    
+    Args:
+        name (str): Logger name (usually __name__ from the calling module)
+        log_dir (str): Directory to store log files
+        
+    Returns:
+        logger: Configured logger instance
+    """
+    # Create logs directory if it doesn't exist
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Create logger instance
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # File handler
+    log_file = os.path.join(
+        log_dir, 
+        f'run_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+    )
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+    
+    return logger
+--------------------------------------------------------------------------------
+File: ./src/utils/__init__.py
+--------------------------------------------------------------------------------
+from .logger import get_logger
+
+__all__ = ['get_logger']
+--------------------------------------------------------------------------------
+File: ./src/data/dataset.py
+--------------------------------------------------------------------------------
+import torch
+from torch.utils.data import Dataset
+from PIL import Image
+import os
+import numpy as np
+
+class HAM10000Dataset(Dataset):
+    """
+    HAM10000 dataset class for PyTorch
+    """
+    def __init__(self, df, image_dir, transform=None):
+        """
+        Args:
+            df (pandas.DataFrame): DataFrame containing image metadata
+            image_dir (str): Directory containing images
+            transform (callable, optional): Optional transform to be applied on images
+        """
+        self.df = df
+        self.image_dir = image_dir
+        self.transform = transform
+        self.class_columns = ['MEL', 'NV', 'BCC', 'AKIEC', 'BKL', 'DF', 'VASC']
+        
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, idx):
+        # Get image path
+        img_name = self.df.iloc[idx]['image']
+        img_path = os.path.join(self.image_dir, img_name + '.jpg')
+        
+        # Get label as class index
+        label_onehot = self.df.iloc[idx][self.class_columns].values.astype(np.float32)
+        label = np.argmax(label_onehot)
+        
+        # Load and transform image
+        image = Image.open(img_path).convert('RGB')
+        if self.transform:
+            image = self.transform(image)
+            
+        return image, torch.tensor(label, dtype=torch.long)
+
+    def get_class_weights(self):
+        """
+        Calculate class weights for imbalanced dataset
+        """
+        class_counts = [self.df[col].sum() for col in self.class_columns]
+        total = sum(class_counts)
+        class_weights = [total/count for count in class_counts]
+        return torch.FloatTensor(class_weights)
+--------------------------------------------------------------------------------
+File: ./src/data/transforms.py
+--------------------------------------------------------------------------------
+from torchvision import transforms
+
+def get_train_transforms(config):
+    """
+    Get training data transforms
+    """
+    return transforms.Compose([
+        transforms.Resize((config['data']['image_size'], config['data']['image_size'])),
+        # transforms.RandomHorizontalFlip(),
+        # transforms.RandomVerticalFlip(),
+        # transforms.RandomRotation(20),
+        # transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+def get_test_transforms(config):
+    """
+    Get testing/validation data transforms
+    """
+    return transforms.Compose([
+        transforms.Resize((config['data']['image_size'], config['data']['image_size'])),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+--------------------------------------------------------------------------------
+File: ./src/data/augmentation/transforms.py
+--------------------------------------------------------------------------------
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import cv2
+import numpy as np
+
+class AugmentationPipeline:
+    """Class handling image augmentation pipeline"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.train_transform = self.get_train_transform()
+        self.valid_transform = self.get_valid_transform()
+        
+    def get_train_transform(self):
+        """Get augmentation pipeline for training"""
+        return A.Compose([
+            A.Resize(
+                height=self.config['data']['image_size'],
+                width=self.config['data']['image_size']
+            ),
+            A.OneOf([
+                A.RandomRotate90(p=0.5),
+                A.Rotate(
+                    limit=self.config['augmentation']['rotate_limit'],
+                    p=0.5
+                ),
+            ], p=0.5),
+            A.Flip(p=0.5),
+            A.OneOf([
+                A.RandomBrightnessContrast(
+                    brightness_limit=self.config['augmentation']['brightness_contrast_limit'],
+                    contrast_limit=self.config['augmentation']['brightness_contrast_limit'],
+                    p=0.7
+                ),
+                A.HueSaturationValue(
+                    hue_shift_limit=20,
+                    sat_shift_limit=30,
+                    val_shift_limit=20,
+                    p=0.5
+                ),
+            ], p=0.5),
+            A.OneOf([
+                A.GaussNoise(p=0.3),
+                A.GaussianBlur(p=0.3),
+                A.MotionBlur(p=0.3),
+            ], p=0.3),
+            A.ShiftScaleRotate(
+                shift_limit=0.1,
+                scale_limit=0.1,
+                rotate_limit=45,
+                p=0.5
+            ),
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+            ToTensorV2(),
+        ])
+        
+    def get_valid_transform(self):
+        """Get augmentation pipeline for validation/testing"""
+        return A.Compose([
+            A.Resize(
+                height=self.config['data']['image_size'],
+                width=self.config['data']['image_size']
+            ),
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+            ToTensorV2(),
+        ])
+--------------------------------------------------------------------------------
+File: ./src/data/augmentation/__init__.py
+--------------------------------------------------------------------------------
+from .augmentor import DataAugmentor
+from .transforms import AugmentationPipeline
+
+__all__ = ['DataAugmentor', 'AugmentationPipeline']
+--------------------------------------------------------------------------------
+File: ./src/data/augmentation/augmentor.py
+--------------------------------------------------------------------------------
+import os
+import cv2
+import numpy as np
+from tqdm import tqdm
+import pandas as pd
+from .transforms import AugmentationPipeline
+
+class DataAugmentor:
+    """Class for handling data augmentation process"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.augmentation = AugmentationPipeline(config)
+        
+    def augment_image(self, image_path, num_augmentations):
+        """
+        Augment a single image multiple times
+        
+        Args:
+            image_path (str): Path to image
+            num_augmentations (int): Number of augmented versions to create
+            
+        Returns:
+            list: List of augmented images
+        """
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        augmented_images = []
+        for _ in range(num_augmentations):
+            augmented = self.augmentation.train_transform(image=image)['image']
+            augmented_images.append(augmented)
+            
+        return augmented_images
+    
+    def augment_class(self, df, class_name, target_samples):
+        """
+        Augment images of a specific class to reach target number of samples
+        
+        Args:
+            df (pd.DataFrame): DataFrame with image metadata
+            class_name (str): Name of the class to augment
+            target_samples (int): Target number of samples
+            
+        Returns:
+            pd.DataFrame: DataFrame with augmented data
+        """
+        class_df = df[df[class_name] == 1].copy()
+        current_samples = len(class_df)
+        
+        if current_samples >= target_samples:
+            return pd.DataFrame()  # No augmentation needed
+            
+        augmented_data = []
+        samples_needed = target_samples - current_samples
+        multiplier = samples_needed // current_samples + 1
+        
+        for idx, row in tqdm(class_df.iterrows(), 
+                           total=len(class_df),
+                           desc=f"Augmenting {class_name}"):
+            image_path = os.path.join(self.config['data']['raw_dir'], 
+                                    f"{row['image']}.jpg")
+            
+            for i in range(multiplier):
+                if len(augmented_data) >= samples_needed:
+                    break
+                    
+                new_row = row.copy()
+                new_row['image'] = f"{row['image']}_aug_{i+1}"
+                augmented_data.append(new_row)
+                
+        return pd.DataFrame(augmented_data)
+    
+    def augment_dataset(self, df):
+        """
+        Augment entire dataset based on config settings
+        
+        Args:
+            df (pd.DataFrame): Original DataFrame with image metadata
+            
+        Returns:
+            pd.DataFrame: Augmented DataFrame
+        """
+        augmented_df = df.copy()
+        target_samples = self.config['augmentation']['target_samples']
+        
+        for class_name in ['MEL', 'BCC', 'AKIEC', 'BKL', 'DF', 'VASC']:
+            aug_class_df = self.augment_class(df, class_name, target_samples)
+            if not aug_class_df.empty:
+                augmented_df = pd.concat([augmented_df, aug_class_df], 
+                                       ignore_index=True)
+                
+        return augmented_df
+    
+    def save_augmented_data(self, augmented_df):
+        """
+        Save augmented images and metadata
+        
+        Args:
+            augmented_df (pd.DataFrame): DataFrame with augmented data
+        """
+        output_dir = self.config['data']['augmented_dir']
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save original images
+        for idx, row in tqdm(augmented_df.iterrows(), 
+                           desc="Saving images",
+                           total=len(augmented_df)):
+            if '_aug_' not in row['image']:
+                src_path = os.path.join(self.config['data']['raw_dir'], 
+                                      f"{row['image']}.jpg")
+                dst_path = os.path.join(output_dir, f"{row['image']}.jpg")
+                if not os.path.exists(dst_path):
+                    cv2.imwrite(dst_path, cv2.imread(src_path))
+                    
+            else:
+                # Generate and save augmented image
+                original_name = row['image'].split('_aug_')[0]
+                original_path = os.path.join(self.config['data']['raw_dir'], 
+                                          f"{original_name}.jpg")
+                img = cv2.imread(original_path)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                augmented = self.augmentation.train_transform(image=img)['image']
+                augmented = augmented.numpy().transpose(1, 2, 0)
+                augmented = (augmented * 255).astype(np.uint8)
+                cv2.imwrite(
+                    os.path.join(output_dir, f"{row['image']}.jpg"),
+                    cv2.cvtColor(augmented, cv2.COLOR_RGB2BGR)
+                )
+        
+        # Save metadata
+        augmented_df.to_csv(
+            os.path.join(self.config['data']['processed_dir'], 'augmented_metadata.csv'),
+            index=False
+        )
+--------------------------------------------------------------------------------
+File: ./tests/sum_code.py
 --------------------------------------------------------------------------------
 import os
 
