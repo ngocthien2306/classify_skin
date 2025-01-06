@@ -101,11 +101,23 @@ class SkinLesionDataset(Dataset):
         return image, torch.tensor(label, dtype=torch.long)
     
     def get_class_weights(self):
-        """Calculate class weights for imbalanced dataset"""
+        """
+        Calculate class weights for imbalanced dataset using effective samples
+        Reference: https://arxiv.org/abs/1901.05555
+        """
         class_counts = [0] * len(self.classes)
+        total_samples = len(self.samples)
+        beta = 0.9999  # Smoothing factor
+        
         for _, label in self.samples:
             class_counts[label] += 1
             
-        total = sum(class_counts)
-        class_weights = [total/count if count > 0 else 0 for count in class_counts]
-        return torch.FloatTensor(class_weights)
+        # Calculate effective number of samples
+        effective_nums = [1.0 - np.power(beta, count) for count in class_counts]
+        weights = [(1.0 - beta) / num if num > 0 else 0 for num in effective_nums]
+        
+        # Normalize weights
+        weights = np.array(weights)
+        weights = weights / np.sum(weights) * len(self.classes)
+        
+        return torch.FloatTensor(weights)

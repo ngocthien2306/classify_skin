@@ -103,7 +103,7 @@ def main():
     
     # Train model
     logger.info("Starting training...")
-    history = trainer.train(train_loader, test_loader)
+    history = trainer.train(test_loader, test_loader)
     
     # Plot training history
     visualizer.plot_training_history(
