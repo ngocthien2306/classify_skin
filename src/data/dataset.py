@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 from PIL import Image
 import os
 import numpy as np
+from pathlib import Path
 
 class HAM10000Dataset(Dataset):
     """
@@ -46,4 +47,65 @@ class HAM10000Dataset(Dataset):
         class_counts = [self.df[col].sum() for col in self.class_columns]
         total = sum(class_counts)
         class_weights = [total/count for count in class_counts]
+        return torch.FloatTensor(class_weights)
+    
+class SkinLesionDataset(Dataset):
+    """Dataset class for skin lesion classification with folder-based organization"""
+    
+    def __init__(self, root_dir, split='train', transform=None):
+        """
+        Args:
+            root_dir (str): Root directory containing train/test/valid folders
+            split (str): Which dataset split to use ('train', 'test', or 'valid')
+            transform (callable, optional): Optional transform to be applied on images
+        """
+        self.root_dir = Path(root_dir)
+        self.split = split
+        self.transform = transform
+        
+        # Define class names based on folders
+        self.classes = ['akiec', 'bcc', 'bkl', 'df', 'mel', 'nv', 'vasc']
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+        
+        # Get all image paths and labels
+        self.samples = self._get_samples()
+        
+    def _get_samples(self):
+        """Get all image paths and their corresponding labels"""
+        samples = []
+        split_dir = self.root_dir / self.split
+        
+        for class_name in self.classes:
+            class_dir = split_dir / class_name
+            if not class_dir.exists():
+                continue
+                
+            for img_path in class_dir.glob('*.jpg'):  # Can add more extensions if needed
+                samples.append((str(img_path), self.class_to_idx[class_name]))
+                
+        return samples
+    
+    def __len__(self):
+        return len(self.samples)
+    
+    def __getitem__(self, idx):
+        img_path, label = self.samples[idx]
+        
+        # Load and convert image to RGB
+        image = Image.open(img_path).convert('RGB')
+        
+        # Apply transforms if specified
+        if self.transform:
+            image = self.transform(image)
+            
+        return image, torch.tensor(label, dtype=torch.long)
+    
+    def get_class_weights(self):
+        """Calculate class weights for imbalanced dataset"""
+        class_counts = [0] * len(self.classes)
+        for _, label in self.samples:
+            class_counts[label] += 1
+            
+        total = sum(class_counts)
+        class_weights = [total/count if count > 0 else 0 for count in class_counts]
         return torch.FloatTensor(class_weights)

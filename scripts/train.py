@@ -7,8 +7,8 @@ import torch
 import pandas as pd
 from torch.utils.data import DataLoader
 
-from src.data.dataset import HAM10000Dataset
-from src.data.transforms import get_train_transforms, get_test_transforms
+from src.data.dataset import HAM10000Dataset, SkinLesionDataset
+from src.data.transforms import get_train_transforms, get_test_transforms, get_val_transforms
 from src.models import get_model
 from src.training import get_optimizer, get_scheduler, get_criterion, Trainer
 from src.utils import get_logger
@@ -30,22 +30,36 @@ def main():
     os.makedirs(config['training']['checkpoint_dir'], exist_ok=True)
     os.makedirs(config['visualization']['output_dir'], exist_ok=True)
     
-    # Load data
-    train_df = pd.read_csv(config['paths']['train_metadata'])
-    test_df = pd.read_csv(config['paths']['test_metadata'])
+    if config['paths']['mode'] == 'csv':
+        # Load data
+        train_df = pd.read_csv(config['paths']['train_metadata'])
+        test_df = pd.read_csv(config['paths']['test_metadata'])
+        
+        # Create datasets
+        train_dataset = HAM10000Dataset(
+            train_df,
+            config['data']['augmented_dir'],
+            transform=get_train_transforms(config)
+        )
+        test_dataset = HAM10000Dataset(
+            test_df,
+            config['data']['augmented_dir'],
+            transform=get_val_transforms(config)
+        )
     
-    # Create datasets
-    train_dataset = HAM10000Dataset(
-        train_df,
-        config['data']['augmented_dir'],
-        transform=get_train_transforms(config)
-    )
-    test_dataset = HAM10000Dataset(
-        test_df,
-        config['data']['augmented_dir'],
-        transform=get_test_transforms(config)
-    )
-    
+    else:
+        train_dataset = SkinLesionDataset(
+            root_dir=config['paths']['root_path'],
+            split='train',
+            transform=get_train_transforms(config)
+        )
+        
+        test_dataset = SkinLesionDataset(
+            root_dir=config['paths']['root_path'],
+            split='valid', 
+            transform=get_val_transforms(config)
+        )
+        
     # Create dataloaders
     train_loader = DataLoader(
         train_dataset,
@@ -54,6 +68,7 @@ def main():
         num_workers=config['data']['num_workers'],
         pin_memory=True
     )
+    
     test_loader = DataLoader(
         test_dataset,
         batch_size=config['data']['batch_size'],
@@ -61,7 +76,8 @@ def main():
         num_workers=config['data']['num_workers'],
         pin_memory=True
     )
-    
+        
+        
     # Calculate class weights if needed
     if config['training']['use_class_weights']:
         class_weights = train_dataset.get_class_weights()

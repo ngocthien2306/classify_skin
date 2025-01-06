@@ -3,15 +3,17 @@ data:
   processed_dir: "dataset/processed"
   augmented_dir: "dataset/augmented"
   image_size: 224
-  batch_size: 64
+  batch_size: 512
   num_workers: 4
 
-  test_size: 0.2
+  val_size: 0.1  
+  test_size: 0.082
   random_state: 42
+
   stratify: true
 
 model:
-  name: "emsac"  
+  name: "emsac_cap"  # resnet, emsac_cap, emsac
   num_classes: 7
   pretrained: false
   dropout_rate: 0.5
@@ -19,14 +21,25 @@ model:
   learning_rate: 0.001
   weight_decay: 0.0001
   momentum: 0.9
-  
+
+  # if model is emsac_cap
+  n_channels: 3
+  conv_outputs: 256 #Feature_map
+  num_primary_units: 8
+  primary_unit_size: 1152 # 32*6*6 fixme get from conv2d
+  output_unit_size: 16
+  img_size: 299
+  init_weights: true
+  mode: '256'
+    
 training:
   epochs: 50
+  save_interval: 100 
   checkpoint_dir: "checkpoints"
   early_stopping_patience: 5
   use_class_weights: true
   criterion: 'margin'  # Options: 'cross_entropy', 'margin', 'combined'
-  
+  metrics_interval: 100
   # Optional settings for margin loss
   margin_loss:
     m_plus: 0.9
@@ -68,6 +81,10 @@ paths:
   train_metadata: "dataset/processed/train_metadata.csv"
   test_metadata: "dataset/processed/test_metadata.csv"
   augmented_metadata: "dataset/processed/augmented_metadata.csv"
+
+  # for another dataset
+  mode: "folder" # csv
+  root_path: "dataset"
 
 logging:
   log_dir: "logs"
