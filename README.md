@@ -47,6 +47,7 @@ python scripts/train.py
 #### Evaluation
 ```
 python scripts/evaluate.py
+python scripts/evaluate_new.py
 ```
 
 #### Augmentation and Split data
