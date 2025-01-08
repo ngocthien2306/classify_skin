@@ -137,8 +137,8 @@ def evaluate_model(model, test_loader, config):
         'probabilities': np.array(all_probabilities)
     }
 
-def calculate_metrics(results, config):
-    """Calculate evaluation metrics"""
+def calculate_metrics(results, config): 
+    """Calculate evaluation metrics including F1-score"""
     confusion_matrix = results['confusion_matrix']
     
     # Overall accuracy
@@ -149,41 +149,81 @@ def calculate_metrics(results, config):
     per_class_precision = confusion_matrix.diag() / confusion_matrix.sum(0)
     per_class_recall = confusion_matrix.diag() / confusion_matrix.sum(1)
     
+    # Calculate F1 score
+    # F1 = 2 * (precision * recall) / (precision + recall)
+    per_class_f1 = 2 * (per_class_precision * per_class_recall) / (per_class_precision + per_class_recall)
+    
+    # Handle division by zero cases
+    per_class_f1 = torch.nan_to_num(per_class_f1, 0)  # Replace NaN with 0
+    
     return {
         'accuracy': accuracy,
         'per_class_accuracy': per_class_accuracy,
         'per_class_precision': per_class_precision,
-        'per_class_recall': per_class_recall
+        'per_class_recall': per_class_recall,
+        'per_class_f1': per_class_f1
     }
 
 def plot_results(results, metrics, config):
-    """Plot and save evaluation results"""
-    # Plot confusion matrix
+    """Plot and save evaluation results with enhanced visualization"""
+    
+    # Set figure size
     plt.figure(figsize=(12, 8))
+    
+    # Convert confusion matrix to integers
+    conf_matrix = results['confusion_matrix'].numpy().astype(int)
+    
+    # Create heatmap with improved styling
     sns.heatmap(
-        results['confusion_matrix'].numpy(),
-        annot=True,
-        fmt='g',
+        conf_matrix,
+        annot=True,                    # Show numbers in cells
+        fmt='d',                       # Use integer format for display
+        cmap='Blues',                  # Use blue color palette
+        cbar_kws={'label': 'Count'},   # Add colorbar label
+        square=True,                   # Make cells square
         xticklabels=config.class_names,
-        yticklabels=config.class_names
+        yticklabels=config.class_names,
+        annot_kws={'size': 10, 'weight': 'bold'}  # Make numbers bold
     )
-    plt.title('Confusion Matrix')
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.savefig(f'{config.results_dir}/confusion_matrix.png')
+
+    # Customize title and labels
+    plt.title('Confusion Matrix', size=14, pad=20, weight='bold')
+    plt.xlabel('Predicted Label', size=12, labelpad=10)
+    plt.ylabel('True Label', size=12, labelpad=10)
+
+    # Rotate x-axis labels for better readability 
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+
+    # Save plot with high resolution
+    plt.savefig(
+        f'{config.results_dir}/confusion_matrix.png',
+        dpi=300,
+        bbox_inches='tight'
+    )
     plt.close()
     
     # Print metrics
     print(f"\nOverall Accuracy: {metrics['accuracy']:.2f}%")
     print("\nPer-class Performance:")
-    print(f"{'Class':10} {'Accuracy':>10} {'Precision':>10} {'Recall':>10}")
-    print("-" * 50)
+    print(f"{'Class':10} {'Accuracy':>10} {'Precision':>10} {'Recall':>10} {'F1-Score':>10}")
+    print("-" * 60)  # Increased length for new column
+    
+    # Calculate average F1 score
+    avg_f1 = metrics['per_class_f1'].mean() * 100
     
     for i, class_name in enumerate(config.class_names):
         print(f"{class_name:10} "
               f"{metrics['per_class_accuracy'][i]*100:10.2f}% "
               f"{metrics['per_class_precision'][i]*100:10.2f}% "
-              f"{metrics['per_class_recall'][i]*100:10.2f}%")
+              f"{metrics['per_class_recall'][i]*100:10.2f}% "
+              f"{metrics['per_class_f1'][i]*100:10.2f}%")
+    
+    print("-" * 60)
+    print(f"Average F1-Score: {avg_f1:.2f}%")
               
 def save_results(results, metrics, config):
     """Save evaluation results"""
