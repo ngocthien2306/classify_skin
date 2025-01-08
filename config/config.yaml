@@ -3,7 +3,7 @@ data:
   processed_dir: "dataset/processed"
   augmented_dir: "dataset/augmented"
   image_size: 224
-  batch_size: 512
+  batch_size: 64
   num_workers: 4
 
   val_size: 0.1  
@@ -13,7 +13,7 @@ data:
   stratify: true
 
 model:
-  name: "emsac_cap"  # resnet, emsac_cap, emsac
+  name: "emsac"  # resnet, emsac_cap, emsac
   num_classes: 7
   pretrained: false
   dropout_rate: 0.5
@@ -61,7 +61,7 @@ training:
 
 optimizer:
   name: "adam"  # options: adam, sgd
-  learning_rate: 0.001
+  learning_rate: 0.123
   weight_decay: 0.0001
   momentum: 0.9  # only for SGD
 
